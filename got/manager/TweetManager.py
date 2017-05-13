@@ -8,7 +8,7 @@ class TweetManager:
 		pass
 		
 	@staticmethod
-	def getTweets(tweetCriteria, receiveBuffer = None, bufferLength = 100):
+	def getTweets(tweetCriteria, receiveBuffer=None, bufferLength=100, proxy=None):
 		refreshCursor = ''
 	
 		results = []
@@ -21,7 +21,7 @@ class TweetManager:
 		active = True
 
 		while active:
-			json = TweetManager.getJsonReponse(tweetCriteria, refreshCursor, cookieJar)
+			json = TweetManager.getJsonReponse(tweetCriteria, refreshCursor, cookieJar, proxy)
 			if len(json['items_html'].strip()) == 0:
 				break
 
@@ -35,7 +35,7 @@ class TweetManager:
 				tweetPQ = PyQuery(tweetHTML)
 				tweet = models.Tweet()
 				
-				usernameTweet = tweetPQ("span.username.js-action-profile-name b").text();
+				usernameTweet = tweetPQ("span:first.username.u-dir b").text();
 				txt = re.sub(r"\s+", " ", tweetPQ("p.js-tweet-text").text().replace('# ', '#').replace('@ ', '@'));
 				retweets = int(tweetPQ("span.ProfileTweet-action--retweet span.ProfileTweet-actionCount").attr("data-tweet-stat-count").replace(",", ""));
 				favorites = int(tweetPQ("span.ProfileTweet-action--favorite span.ProfileTweet-actionCount").attr("data-tweet-stat-count").replace(",", ""));
@@ -77,26 +77,33 @@ class TweetManager:
 		return results
 	
 	@staticmethod
-	def getJsonReponse(tweetCriteria, refreshCursor, cookieJar):
+	def getJsonReponse(tweetCriteria, refreshCursor, cookieJar, proxy):
 		url = "https://twitter.com/i/search/timeline?f=tweets&q=%s&src=typd&max_position=%s"
 		
 		urlGetData = ''
+		
 		if hasattr(tweetCriteria, 'username'):
 			urlGetData += ' from:' + tweetCriteria.username
-			
+		
+		if hasattr(tweetCriteria, 'querySearch'):
+			urlGetData += ' ' + tweetCriteria.querySearch
+		
+		if hasattr(tweetCriteria, 'near'):
+			urlGetData += "&near:" + tweetCriteria.near + " within:" + tweetCriteria.within
+		
 		if hasattr(tweetCriteria, 'since'):
 			urlGetData += ' since:' + tweetCriteria.since
 			
 		if hasattr(tweetCriteria, 'until'):
 			urlGetData += ' until:' + tweetCriteria.until
-			
-		if hasattr(tweetCriteria, 'querySearch'):
-			urlGetData += ' ' + tweetCriteria.querySearch
+		
 
 		if hasattr(tweetCriteria, 'topTweets'):
 			if tweetCriteria.topTweets:
 				url = "https://twitter.com/i/search/timeline?q=%s&src=typd&max_position=%s"
-
+		
+		
+		
 		url = url % (urllib.quote(urlGetData), refreshCursor)
 
 		headers = [
@@ -109,7 +116,10 @@ class TweetManager:
 			('Connection', "keep-alive")
 		]
 
-		opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookieJar))
+		if proxy:
+			opener = urllib2.build_opener(urllib2.ProxyHandler({'http': proxy, 'https': proxy}), urllib2.HTTPCookieProcessor(cookieJar))
+		else:
+			opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cookieJar))
 		opener.addheaders = headers
 
 		try:
